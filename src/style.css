@@ -1,0 +1,111 @@
+:root {
+  --bg: #071526;
+  --panel: rgba(8, 24, 44, 0.94);
+  --panel2: rgba(14, 40, 70, 0.9);
+  --border: #2f6fa0;
+  --border2: #7fd8ff;
+  --text: #e6f4ff;
+  --muted: #8fb3cc;
+  --accent: #ffd84a;
+  --good: #55efc4;
+  --warn: #ffb74a;
+  --bad: #ff6b6b;
+  --font: 'Zpix', 'Fusion Pixel', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', monospace;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+img.pix {
+  image-rendering: pixelated;
+}
+button {
+  font-family: var(--font);
+  color: var(--text);
+  background: #12385e;
+  border: 2px solid var(--border);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 2px 0 #031020;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: transform 0.05s, background 0.15s;
+}
+button:hover:not(:disabled) {
+  background: #1a4f80;
+  border-color: var(--border2);
+}
+button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: #c08a1a;
+  border-color: #ffd84a;
+  color: #fff;
+}
+button.primary:hover:not(:disabled) {
+  background: #d8a020;
+}
+button.danger {
+  background: #7a2a2a;
+  border-color: #ff6b6b;
+}
+input[type='text'],
+input[type='search'],
+select {
+  font-family: var(--font);
+  background: #061a30;
+  color: var(--text);
+  border: 2px solid var(--border);
+  padding: 5px 8px;
+  font-size: 14px;
+  border-radius: 0;
+  outline: none;
+}
+input[type='range'] {
+  accent-color: var(--accent);
+}
+.pixel-box {
+  background: var(--panel);
+  border: 3px solid var(--border);
+  box-shadow: 0 0 0 3px #031020, 0 6px 0 3px rgba(0, 0, 0, 0.4);
+}
+.muted {
+  color: var(--muted);
+}
+.gold {
+  color: var(--accent);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #061424;
+}
+::-webkit-scrollbar-thumb {
+  background: #2f6fa0;
+}
