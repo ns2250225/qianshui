@@ -111,7 +111,7 @@ export class Game {
   private detectT = 0
   private warnT = 0
   private hurtMsgT = 0
-  private lastRegion = ''
+  private sightT = 0
   private trapSprites = new Map<string, Sprite>()
   private interact: { hint: string; act: () => void } | null = null
   private travelT = 0
@@ -550,6 +550,11 @@ export class Game {
   }
 
   private updateBoat(dt: number) {
+    this.sightT -= dt
+    if (this.sightT <= 0) {
+      this.sightT = 0.5
+      this.sight(this.surface.boatX)
+    }
     if (input.consume('jump')) this.startJump()
     this.cam.x += (this.surface.boatX - this.cam.x) * Math.min(1, dt * 3)
     this.cam.y += (-60 - this.cam.y) * Math.min(1, dt * 3)
@@ -579,6 +584,14 @@ export class Game {
     ui.fade = Math.min(1, this.travelT / 0.5)
     if (this.travelT >= 0.6 && this.travelTarget !== null) {
       const dist = Math.abs(this.travelTarget - this.surface.boatX)
+      // 航线经过的海面全部计入海图
+      const a = Math.min(this.travelTarget, this.surface.boatX)
+      const b = Math.max(this.travelTarget, this.surface.boatX)
+      for (let x = a; x <= b + CHUNK; x += CHUNK) {
+        const k = `${Math.floor(x / CHUNK)}:-1`
+        if (!save.explored[k]) save.explored[k] = 1
+        this.discoverRegion(x)
+      }
       save.totalMinutes += Math.min(600, (dist / PX_PER_M_X / 1000) * 12)
       this.surface.boatX = this.travelTarget
       save.boatX = this.travelTarget
@@ -749,23 +762,38 @@ export class Game {
       for (let i = -r; i <= r; i++) for (let j = -1; j <= 1; j++) save.explored[`${cx + i}:${cy + j}`] = 1
       // 海面也记录
       save.explored[`${cx}:-1`] = 1
-      // 海域发现
-      const reg = regionAt(p.x)
-      if (reg.id !== this.lastRegion) {
-        this.lastRegion = reg.id
-        if (!save.regionsFound[reg.id]) {
-          save.regionsFound[reg.id] = 1
-          if (Object.keys(save.regionsFound).length > 1) {
-            toast(`🗺️ 发现新海域：${reg.name}`, 'record', 3500)
-            ProgressSystem.addResearch(200, '新海域')
-          }
-          ProgressSystem.checkRegions()
-        }
-      }
+      // 海域发现：视野所及即算发现（极地等需要装备才能进入的海域也能被“望见”）
+      this.sight(p.x)
       for (const f of this.world.featuresWithin(p.x, p.y, 420)) this.discoverFeature(f)
     }
     if (this.env.isNight) ProgressSystem.unlock('night_dive')
     if (this.env.weather.thunder) ProgressSystem.unlock('storm_dive')
+  }
+
+  /** 记录海域发现 */
+  private discoverRegion(x: number) {
+    const reg = regionAt(x)
+    if (save.regionsFound[reg.id]) return
+    save.regionsFound[reg.id] = 1
+    const n = Object.keys(save.regionsFound).length
+    if (n > 1) {
+      let need = ''
+      if (reg.needThermal && this.stats.thermal < reg.needThermal)
+        need = reg.needThermalBelow ? `（${reg.needThermalBelow}m 以下需要「全域温控层」）` : '（需要「极地保温层」才能进入）'
+      toast(`🗺️ 发现新海域：${reg.name}${need}　${n}/11`, 'record', 4500)
+      ProgressSystem.addResearch(200, '新海域')
+    }
+    ProgressSystem.checkRegions()
+  }
+
+  /** 视野范围内的海面计入海图，并发现其中的海域 */
+  private sight(x: number) {
+    const half = this.viewW / 2 + 300
+    for (let sx = x - half; sx <= x + half + 1; sx += CHUNK / 2) {
+      const k = `${Math.floor(sx / CHUNK)}:-1`
+      if (!save.explored[k]) save.explored[k] = 1
+      this.discoverRegion(sx)
+    }
   }
 
   private findInteract() {

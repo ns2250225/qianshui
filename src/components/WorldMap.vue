@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, reactive, watch } from 'vue'
+import { onMounted, onUnmounted, ref, reactive, watch, computed } from 'vue'
 import Panel from './Panel.vue'
 import { save, ui, toast } from '../store/state'
 import { game } from '../game/core/Game'
 import { CHUNK, PX_PER_M_X, yToDepth, depthToY, REGION_W } from '../game/core/constants'
 import { floorY, regionOfCell, cellAt, cellStart } from '../game/world/Terrain'
+import { REGION_LIST, regionIdAtCell } from '../data/regions/regions'
 
 const cv = ref<HTMLCanvasElement>()
 const wrap = ref<HTMLDivElement>()
@@ -19,6 +20,49 @@ const MARKERS = [
   { t: '🐟', name: '鱼群' },
   { t: '?', name: '未探索' },
 ]
+/** 11 种海域：离小船最近的一处位置 */
+const regions = computed(() => {
+  void save.regionsFound
+  const from = ui.mode === 'diving' ? game.player.x : game.surface.boatX
+  const c0 = cellAt(from)
+  return REGION_LIST.map((r) => {
+    let best: number | null = null
+    for (let d = 0; d <= 40 && best === null; d++) {
+      for (const c of d === 0 ? [c0] : [c0 + d, c0 - d]) {
+        if (regionIdAtCell(c) === r.id) {
+          best = c
+          break
+        }
+      }
+    }
+    const cx = best === null ? null : cellStart(best) + REGION_W / 2
+    const dx = cx === null ? 0 : cx - from
+    const km = Math.abs(dx) / PX_PER_M_X / 1000
+    return {
+      r,
+      found: !!save.regionsFound[r.id],
+      here: best === c0,
+      cx,
+      dir: cx === null ? '' : best === c0 ? '当前海域' : `${dx > 0 ? '东' : '西'} ${km < 10 ? km.toFixed(1) : Math.round(km)}km`,
+      need: r.needThermal ? (r.needThermal >= 2 ? '深处需全域温控层' : '需极地保温层') : '',
+    }
+  })
+})
+function locate(x: number | null) {
+  if (x === null) return
+  view.x = x
+  view.y = 1500
+  view.scale = Math.min(view.scale, 0.02)
+}
+function sailTo(x: number | null) {
+  if (x === null) return
+  if (ui.mode !== 'boat') {
+    toast('需要在船上才能航行', 'warn')
+    return
+  }
+  game.travelTo(x)
+}
+
 const FEATURE_ICON: Record<string, string> = { wreck: '⚓', cave: '●', vent: '♨', whalefall: '🐋', abyss: '⬇' }
 const hover = ref('')
 let raf = 0
@@ -106,8 +150,9 @@ function draw() {
     const [bx] = toScreen(cellStart(c0), 0, W, H)
     ctx.fillStyle = 'rgba(127,216,255,0.25)'
     ctx.fillRect(bx, 0, 1, H)
-    ctx.fillStyle = known ? '#ffe680' : '#456'
-    ctx.fillText(known ? r.name : '未探索海域', sx, Math.max(14, sy0 - 8))
+    const found = !!save.regionsFound[r.id]
+    ctx.fillStyle = known ? '#ffe680' : found ? 'rgba(255,230,128,0.55)' : '#456'
+    ctx.fillText(known || found ? r.name : '？？？', sx, Math.max(14, sy0 - 8))
   }
   // 深度刻度
   ctx.textAlign = 'left'
@@ -193,8 +238,8 @@ function pup(e: PointerEvent) {
   } else if (tool.value === 'travel') {
     const k = `${Math.floor(wx / CHUNK)}:-1`
     const k2 = `${Math.floor(wx / CHUNK)}:0`
-    if (!save.explored[k] && !save.explored[k2]) {
-      toast('只能航行到已探索的海面区域', 'warn')
+    if (!save.explored[k] && !save.explored[k2] && !save.regionsFound[regionOfCell(cellAt(wx)).id]) {
+      toast('只能航行到已发现的海域', 'warn')
       return
     }
     game.travelTo(wx)
@@ -240,8 +285,21 @@ watch(tool, (t) => {
       <button @click="zoom(1 / 1.4)">－</button>
       <button @click="center">◎ 定位</button>
     </div>
-    <div ref="wrap" class="map-wrap">
-      <canvas ref="cv" @pointerdown="pdown" @pointermove="pmove" @pointerup="pup" @wheel="wheel"></canvas>
+    <div class="map-row">
+      <div ref="wrap" class="map-wrap">
+        <canvas ref="cv" @pointerdown="pdown" @pointermove="pmove" @pointerup="pup" @wheel="wheel"></canvas>
+      </div>
+      <div class="regions">
+        <div class="rt">全球海域 {{ Object.keys(save.regionsFound).length }}/11</div>
+        <div v-for="x in regions" :key="x.r.id" class="reg" :class="{ found: x.found, here: x.here }">
+          <div class="rn">{{ x.found ? '✔ ' + x.r.name : '？ 未发现海域' }}</div>
+          <div class="rd muted">{{ x.dir }}<span v-if="x.found && x.need"> · {{ x.need }}</span></div>
+          <div class="rb">
+            <button @click="locate(x.cx)">◎ 定位</button>
+            <button v-if="x.found && !x.here" :disabled="ui.mode !== 'boat'" @click="sailTo(x.cx)">⛵ 航行</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="foot muted">
       <span>{{ hover }}</span>
@@ -268,9 +326,65 @@ watch(tool, (t) => {
 .sp {
   flex: 1;
 }
+.map-row {
+  display: flex;
+  gap: 8px;
+}
 .map-wrap {
+  flex: 1;
+  min-width: 0;
   height: min(62vh, 560px);
   border: 2px solid var(--border);
+}
+.regions {
+  width: 200px;
+  height: min(62vh, 560px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rt {
+  color: var(--accent);
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+.reg {
+  background: #06182c;
+  border: 2px solid #1a3a5a;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.reg.found {
+  border-color: #2a6a5a;
+}
+.reg.here {
+  border-color: var(--accent);
+}
+.rn {
+  font-size: 13px;
+}
+.rd {
+  font-size: 11px;
+}
+.rb {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+.rb button {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+@media (max-width: 700px) {
+  .map-row {
+    flex-direction: column;
+  }
+  .regions {
+    width: 100%;
+    height: auto;
+    max-height: 30vh;
+  }
 }
 canvas {
   width: 100%;
